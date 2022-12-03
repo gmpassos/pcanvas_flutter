@@ -1,5 +1,15 @@
 # PCanvas - Flutter
 
+[![pub package](https://img.shields.io/pub/v/pcanvas_flutter.svg?logo=dart&logoColor=00b9fc)](https://pub.dev/packages/pcanvas_flutter)
+[![Null Safety](https://img.shields.io/badge/null-safety-brightgreen)](https://dart.dev/null-safety)
+[![CI](https://img.shields.io/github/workflow/status/gmpassos/pcanvas_flutter/Dart%20CI/master?logo=github-actions&logoColor=white)](https://github.com/gmpassos/pcanvas_flutter/actions)
+[![GitHub Tag](https://img.shields.io/github/v/tag/gmpassos/pcanvas_flutter?logo=git&logoColor=white)](https://github.com/gmpassos/pcanvas_flutter/releases)
+[![New Commits](https://img.shields.io/github/commits-since/gmpassos/pcanvas_flutter/latest?logo=git&logoColor=white)](https://github.com/gmpassos/pcanvas_flutter/network)
+[![Last Commits](https://img.shields.io/github/last-commit/gmpassos/pcanvas_flutter?logo=git&logoColor=white)](https://github.com/gmpassos/pcanvas_flutter/commits/master)
+[![Pull Requests](https://img.shields.io/github/issues-pr/gmpassos/pcanvas_flutter?logo=github&logoColor=white)](https://github.com/gmpassos/pcanvas_flutter/pulls)
+[![Code size](https://img.shields.io/github/languages/code-size/gmpassos/pcanvas_flutter?logo=github&logoColor=white)](https://github.com/gmpassos/pcanvas_flutter)
+[![License](https://img.shields.io/github/license/gmpassos/pcanvas_flutter?logo=open-source-initiative&logoColor=green)](https://github.com/gmpassos/pcanvas_flutter/blob/master/LICENSE)
+
 This package is the Flutter implementation for package [pcanvas].
 
 [pcanvas]: https://pub.dev/packages/pcanvas
