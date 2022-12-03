@@ -1,0 +1,4 @@
+#Wed Nov 30 23:53:59 BRT 2022
+base.0=/Volumes/safezone/workspace-minersocean/pcanvas_flutter/example/build/app/intermediates/dex/debug/mergeDexDebug/classes.dex
+renamed.0=classes.dex
+path.0=classes.dex

@@ -1,0 +1,26 @@
+name: pcanvas_flutter_example
+description: Flutter example for package `pcanvas` and `pcanvas_flutter`.
+publish_to: 'none'
+version: 0.0.1
+
+environment:
+  sdk: '>=2.18.0 <3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  pcanvas: ^1.0.1
+  pcanvas_flutter: ^1.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+dependency_overrides:
+  pcanvas_flutter:
+    path: ../
+
+flutter:
+  uses-material-design: true
