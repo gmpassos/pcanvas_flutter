@@ -4813,6 +4813,7 @@ clock
 fake_async
 material_color_utilities
 pcanvas
+pcanvas_flutter
 
 
                                  Apache License
