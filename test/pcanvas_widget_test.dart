@@ -43,6 +43,21 @@ void main() {
 
     var c2 = pixels2!.formatColor(PColor.colorBlue);
     expect(pixels2.pixels.every((p) => p == c2), isTrue);
+
+    painter.gradient = true;
+
+    await pCanvas.refresh();
+
+    var pixels3 = await _getPixels(tester, pCanvas);
+
+    expect(pixels3!.pixelColor(0, 0).maxDistance(painter.bgColor),
+        inInclusiveRange(0, 44));
+
+    expect(
+        pixels3
+            .pixelColor(pixels3.width - 1, pixels3.height - 1)
+            .maxDistance(PColor.colorBlack),
+        inInclusiveRange(0, 44));
   });
 }
 
@@ -64,13 +79,19 @@ class MyApp extends StatelessWidget {
 }
 
 class MyCanvasPainter extends PCanvasPainter {
-  PColor bgColor = PColor.colorGrey;
+  bool gradient = false;
+  PColorRGB bgColor = PColor.colorGrey;
 
   @override
   FutureOr<bool> paint(PCanvas pCanvas) {
     if (pCanvas.width == 0 || pCanvas.height == 0) return false;
 
-    pCanvas.clear(style: PStyle(color: bgColor));
+    if (gradient) {
+      pCanvas.fillTopDownGradient(
+          0, 0, pCanvas.width, pCanvas.height, bgColor, PColor.colorBlack);
+    } else {
+      pCanvas.clear(style: PStyle(color: bgColor));
+    }
 
     return true;
   }

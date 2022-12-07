@@ -52,6 +52,7 @@ class MyCanvasPainter extends PCanvasPainter {
   int rectX = 10;
   int rectY = 10;
   PColor rectColor = PColor.colorRed.copyWith(alpha: 0.30);
+  String textExtra = '';
 
   @override
   bool paint(PCanvas pCanvas) {
@@ -77,6 +78,9 @@ class MyCanvasPainter extends PCanvasPainter {
 
     var fontPR = PFont('Arial', 24);
     var textPR = 'devicePixelRatio: ${pCanvas.devicePixelRatio}';
+    if (textExtra.isNotEmpty) {
+      textPR += '\n$textExtra';
+    }
 
     // Measure `text`:
     var m = pCanvas.measureText(textPR, fontPR);
@@ -109,6 +113,9 @@ class MyCanvasPainter extends PCanvasPainter {
     pCanvas.strokePath(path, PStyle(color: PColor.colorRed, size: 3),
         closePath: true);
 
+    pCanvas.fillRightLeftGradient(pCanvas.width ~/ 2, 0, pCanvas.width ~/ 2,
+        pCanvas.height, PColorRGB(0, 32, 94), PColor.colorBlack);
+
     return true;
   }
 
@@ -122,5 +129,18 @@ class MyCanvasPainter extends PCanvasPainter {
 
     // Force a refresh of the canvas:
     refresh();
+
+    pCanvas?.log(event);
+  }
+
+  @override
+  void onKeyDown(PCanvasKeyEvent event) {
+    var s = event.code?.toLowerCase() == 'enter' ? '\n' : (event.key ?? '');
+
+    textExtra += s;
+
+    refresh();
+
+    pCanvas?.log(event);
   }
 }

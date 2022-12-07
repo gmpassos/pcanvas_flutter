@@ -1,14 +1,16 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pcanvas/pcanvas.dart';
 
 /// A [PCanvas] Flutter [Widget].
 // ignore: must_be_immutable
 class PCanvasWidget extends StatefulWidget {
   final PCanvasPainter _painter;
+
+  final ValueChanged<RawKeyEvent>? onKey;
   final GestureTapDownCallback? onTapDown;
   final GestureTapUpCallback? onTapUp;
   final GestureTapCallback? onTap;
@@ -17,6 +19,7 @@ class PCanvasWidget extends StatefulWidget {
   PCanvasWidget(
     this._painter, {
     super.key,
+    this.onKey,
     this.onTapDown,
     this.onTapUp,
     this.onTap,
@@ -55,11 +58,18 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
   _PCanvasWidgetState._copy(_PCanvasWidgetState prevState)
       : _widget = prevState._widget,
         _pCanvasFlutter = prevState._pCanvasFlutter,
-        _lastOnTapUpEvent = prevState._lastOnTapUpEvent;
+        _lastOnTapUpEvent = prevState._lastOnTapUpEvent,
+        _focusNode = prevState._focusNode;
+
+  PCanvas get pCanvas => _pCanvasFlutter;
 
   _PCanvasWidgetState copy() => _PCanvasWidgetState._copy(this);
 
+  late final FocusNode _focusNode;
+
   void _initialize() {
+    _focusNode = FocusNode(debugLabel: 'PCanvas:key');
+
     var canvas = _pCanvasFlutter;
     var painter = canvas.painter;
 
@@ -71,8 +81,6 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
       canvas.callPainter();
     }
   }
-
-  PCanvas get pCanvas => _pCanvasFlutter;
 
   @override
   Widget build(BuildContext context) {
@@ -89,14 +97,17 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
         return SizedBox(
           width: width,
           height: height,
-          child: GestureDetector(
-            onTapDown: _onTapDown,
-            onTapUp: _onTapUp,
-            onTap: _onTap,
-            onTapCancel: _onTapCancel,
-            child: CustomPaint(
-                painter: _pCanvasFlutter._widgetPainter, willChange: true),
-          ),
+          child: RawKeyboardListener(
+              focusNode: _focusNode,
+              onKey: _onKey,
+              child: GestureDetector(
+                onTapDown: _onTapDown,
+                onTapUp: _onTapUp,
+                onTap: _onTap,
+                onTapCancel: _onTapCancel,
+                child: CustomPaint(
+                    painter: _pCanvasFlutter._widgetPainter, willChange: true),
+              )),
         );
       },
     );
@@ -104,8 +115,45 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
 
   void refresh() => _pCanvasFlutter.refresh();
 
+  void _onKey(RawKeyEvent keyEvent) {
+    String type;
+
+    if (keyEvent is RawKeyDownEvent) {
+      type = 'onKeyDown';
+    } else if (keyEvent is RawKeyUpEvent) {
+      type = 'onKeyUp';
+    } else {
+      type = 'onKey';
+    }
+
+    var event = PCanvasKeyEvent(
+        type,
+        keyEvent.logicalKey.keyId,
+        keyEvent.logicalKey.keyLabel,
+        keyEvent.character,
+        keyEvent.isControlPressed,
+        keyEvent.isAltPressed,
+        keyEvent.isShiftPressed,
+        keyEvent.isMetaPressed);
+
+    if (type == 'onKeyDown') {
+      _widget._painter.onKeyDown(event);
+    } else if (type == 'onKeyUp') {
+      _widget._painter.onKeyUp(event);
+    } else {
+      _widget._painter.onKey(event);
+    }
+
+    var f = _widget.onKey;
+    if (f != null) {
+      f(keyEvent);
+    }
+  }
+
   void _onTapDown(TapDownDetails details) {
-    var event = PCanvasEvent(
+    _focusNode.requestFocus();
+
+    var event = PCanvasClickEvent(
         'onTapDown', details.localPosition.dx, details.localPosition.dy);
     _widget._painter.onClickDown(event);
 
@@ -115,10 +163,10 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
     }
   }
 
-  PCanvasEvent? _lastOnTapUpEvent;
+  PCanvasClickEvent? _lastOnTapUpEvent;
 
   void _onTapUp(TapUpDetails details) {
-    var event = _lastOnTapUpEvent = PCanvasEvent(
+    var event = _lastOnTapUpEvent = PCanvasClickEvent(
         'onTapUp', details.localPosition.dx, details.localPosition.dy);
     _widget._painter.onClickUp(event);
 
@@ -195,18 +243,17 @@ class _PCanvasWidgetPainter extends CustomPainter {
     return false;
   }
 
-  bool _requestedRepaint = false;
+  Future<bool>? _requestedRepaint;
 
-  void requestRepaint() {
-    if (!_requestedRepaint) {
-      _requestedRepaint = true;
-      Future.microtask(repaint);
-    }
+  Future<bool> requestRepaint() {
+    var requestedRepaint = _requestedRepaint;
+    if (requestedRepaint != null) return requestedRepaint;
+    return _requestedRepaint = Future.microtask(repaint);
   }
 
-  void repaint() {
+  bool repaint() {
     _renderCount.value++;
-    _requestedRepaint = false;
+    return true;
   }
 
   final List<_PaintFunction> _operations = <_PaintFunction>[];
@@ -243,6 +290,8 @@ class _PCanvasWidgetPainter extends CustomPainter {
       var op = _operations[i];
       op(canvas, size);
     }
+
+    _requestedRepaint = null;
   }
 
   @override
@@ -328,45 +377,17 @@ class PCanvasFlutter extends PCanvas {
   @override
   FutureOr<bool> waitLoading() => painter.waitLoading();
 
-  bool _painting = false;
+  @override
+  Future<bool> requestRepaint() => _widgetPainter.requestRepaint();
 
   @override
-  FutureOr<bool> callPainter() {
-    if (_painting) return false;
-    _painting = true;
-
-    checkDimension();
-
+  void onPrePaint() {
     _widgetPainter.clearOps();
+  }
 
-    try {
-      painter.clear(this);
-
-      FutureOr<bool> ret;
-      if (painter.isLoadingResources) {
-        ret = painter.paintLoading(this);
-      } else {
-        ret = painter.paint(this);
-      }
-
-      if (ret is Future<bool>) {
-        return ret.then((r) {
-          _painting = false;
-          _widgetPainter.repaint();
-          return r;
-        }, onError: (e) {
-          _painting = false;
-          throw e;
-        });
-      } else {
-        _painting = false;
-        _widgetPainter.repaint();
-        return ret;
-      }
-    } catch (e) {
-      _painting = false;
-      rethrow;
-    }
+  @override
+  void onPosPaint() {
+    _widgetPainter.repaint();
   }
 
   @override
@@ -526,6 +547,48 @@ class PCanvasFlutter extends PCanvas {
     final heightD = canvasYD(height);
 
     final paint = style.asPaintFill;
+
+    _widgetPainter.addOp((canvas, size) {
+      var rect = Rect.fromLTWH(xd, yd, widthD, heightD);
+      canvas.drawRect(rect, paint);
+    });
+  }
+
+  @override
+  void fillTopDownGradient(
+      num x, num y, num width, num height, PColor colorFrom, PColor colorTo) {
+    final xd = canvasXD(x);
+    final yd = canvasYD(y);
+    final widthD = canvasXD(width);
+    final heightD = canvasYD(height);
+
+    var paint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(xd, yd),
+        Offset(xd, (yd + heightD)),
+        [colorFrom.asColor, colorTo.asColor],
+      );
+
+    _widgetPainter.addOp((canvas, size) {
+      var rect = Rect.fromLTWH(xd, yd, widthD, heightD);
+      canvas.drawRect(rect, paint);
+    });
+  }
+
+  @override
+  void fillLeftRightGradient(
+      num x, num y, num width, num height, PColor colorFrom, PColor colorTo) {
+    final xd = canvasXD(x);
+    final yd = canvasYD(y);
+    final widthD = canvasXD(width);
+    final heightD = canvasYD(height);
+
+    var paint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(xd, yd),
+        Offset((xd + widthD), yd),
+        [colorFrom.asColor, colorTo.asColor],
+      );
 
     _widgetPainter.addOp((canvas, size) {
       var rect = Rect.fromLTWH(xd, yd, widthD, heightD);
