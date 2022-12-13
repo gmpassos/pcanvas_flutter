@@ -479,10 +479,11 @@ class PCanvasFlutter extends PCanvas {
 
     final xd = canvasXD(x);
     final yd = canvasYD(y);
+    final offset = Offset(xd, yd);
 
     _widgetPainter.addOp((canvas, size) {
       var paint = Paint();
-      canvas.drawImage(image.flutterImage, Offset(xd, yd), paint);
+      canvas.drawImage(image.flutterImage, offset, paint);
     });
   }
 
@@ -501,14 +502,13 @@ class PCanvasFlutter extends PCanvas {
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
+    final rect1 =
+        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
+    final rect2 = Rect.fromLTWH(xd, yd, widthD, heightD);
+
     _widgetPainter.addOp((canvas, size) {
       var paint = Paint();
-
-      canvas.drawImageRect(
-          image.flutterImage,
-          Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-          Rect.fromLTWH(xd, yd, widthD, heightD),
-          paint);
+      canvas.drawImageRect(image.flutterImage, rect1, rect2, paint);
     });
   }
 
@@ -527,15 +527,13 @@ class PCanvasFlutter extends PCanvas {
     final dstWidthD = canvasXD(dstWidth);
     final dstHeightD = canvasYD(dstHeight);
 
+    final rect1 = Rect.fromLTWH(srcX.toDouble(), srcY.toDouble(),
+        srcWidth.toDouble(), srcHeight.toDouble());
+    final rect2 = Rect.fromLTWH(dstXD, dstYD, dstWidthD, dstHeightD);
+
     _widgetPainter.addOp((canvas, size) {
       var paint = Paint();
-
-      canvas.drawImageRect(
-          image.flutterImage,
-          Rect.fromLTWH(srcX.toDouble(), srcY.toDouble(), srcWidth.toDouble(),
-              srcHeight.toDouble()),
-          Rect.fromLTWH(dstXD, dstYD, dstWidthD, dstHeightD),
-          paint);
+      canvas.drawImageRect(image.flutterImage, rect1, rect2, paint);
     });
   }
 
@@ -546,11 +544,43 @@ class PCanvasFlutter extends PCanvas {
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
+    final rect = Rect.fromLTWH(xd, yd, widthD, heightD);
     final paint = style.asPaintFill;
 
     _widgetPainter.addOp((canvas, size) {
-      var rect = Rect.fromLTWH(xd, yd, widthD, heightD);
       canvas.drawRect(rect, paint);
+    });
+  }
+
+  @override
+  void strokeCircle(num x, num y, num radius, PStyle style,
+      {num startAngle = 0, num endAngle = 360}) {
+    var xd = canvasXD(x);
+    var yd = canvasYD(y);
+    var radiusD2 = canvasXD(radius) * 2;
+
+    final rect = Rect.fromLTWH(xd, yd, radiusD2, radiusD2);
+    final paint = style.toPaintStroke(pixelRatio: pixelRatio);
+
+    _widgetPainter.addOp((canvas, size) {
+      canvas.drawArc(
+          rect, startAngle.toDouble(), endAngle.toDouble(), false, paint);
+    });
+  }
+
+  @override
+  void fillCircle(num x, num y, num radius, PStyle style,
+      {num startAngle = 0, num endAngle = 360}) {
+    var xd = canvasXD(x);
+    var yd = canvasYD(y);
+    var radiusD2 = canvasXD(radius) * 2;
+
+    final rect = Rect.fromLTWH(xd, yd, radiusD2, radiusD2);
+    final paint = style.asPaintFill;
+
+    _widgetPainter.addOp((canvas, size) {
+      canvas.drawArc(
+          rect, startAngle.toDouble(), endAngle.toDouble(), false, paint);
     });
   }
 
@@ -562,7 +592,9 @@ class PCanvasFlutter extends PCanvas {
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
-    var paint = Paint()
+    final rect = Rect.fromLTWH(xd, yd, widthD, heightD);
+
+    final paint = Paint()
       ..shader = ui.Gradient.linear(
         Offset(xd, yd),
         Offset(xd, (yd + heightD)),
@@ -570,7 +602,6 @@ class PCanvasFlutter extends PCanvas {
       );
 
     _widgetPainter.addOp((canvas, size) {
-      var rect = Rect.fromLTWH(xd, yd, widthD, heightD);
       canvas.drawRect(rect, paint);
     });
   }
@@ -583,7 +614,9 @@ class PCanvasFlutter extends PCanvas {
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
-    var paint = Paint()
+    final rect = Rect.fromLTWH(xd, yd, widthD, heightD);
+
+    final paint = Paint()
       ..shader = ui.Gradient.linear(
         Offset(xd, yd),
         Offset((xd + widthD), yd),
@@ -591,7 +624,6 @@ class PCanvasFlutter extends PCanvas {
       );
 
     _widgetPainter.addOp((canvas, size) {
-      var rect = Rect.fromLTWH(xd, yd, widthD, heightD);
       canvas.drawRect(rect, paint);
     });
   }
@@ -603,10 +635,10 @@ class PCanvasFlutter extends PCanvas {
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
+    final rect = Rect.fromLTWH(xd, yd, widthD, heightD);
     final paint = style.toPaintStroke(pixelRatio: pixelRatio);
 
     _widgetPainter.addOp((canvas, size) {
-      var rect = Rect.fromLTWH(xd, yd, widthD, heightD);
       canvas.drawRect(rect, paint);
     });
   }
