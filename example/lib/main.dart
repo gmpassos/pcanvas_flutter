@@ -123,8 +123,8 @@ class MyCanvasPainter extends PCanvasPainter {
         canvasHeight, PColorRGB(0, 32, 94), PColor.colorBlack);
 
     // Fill a circle:
-    pCanvas.fillCircle(canvasWidthHalf + (canvasWidthHalf ~/ 2), canvasHeightHalf,
-        20, PStyle(color: PColor.colorGreen));
+    pCanvas.fillCircle(canvasWidthHalf + (canvasWidthHalf ~/ 2),
+        canvasHeightHalf, 20, PStyle(color: PColor.colorGreen));
 
     return true;
   }
