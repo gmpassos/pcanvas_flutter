@@ -1,6 +1,6 @@
 name: pcanvas_flutter
 description: Flutter implementation of `PCanvas` for the package `pcanvas`.
-version: 1.0.1
+version: 1.0.2
 homepage: https://github.com/gmpassos/pcanvas_flutter
 
 environment:
@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  pcanvas: ^1.0.3
+  pcanvas: ^1.0.5
 
 dev_dependencies:
   flutter_test:
