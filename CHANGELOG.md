@@ -8,6 +8,7 @@
   - `pixelsToPNG` using package `image` instead of an internal Flutter Canvas. 
 - `PCanvasWidgetPainter`:
   - `addOpAsync`: to allow operations that need asynchronous resolution.
+- Fix GitHub Dart CI badge.
 - pcanvas: ^1.0.7
 - image: ^4.0.7
 
