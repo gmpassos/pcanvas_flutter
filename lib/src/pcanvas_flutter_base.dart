@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pcanvas/pcanvas.dart';
+// ignore: implementation_imports
+import 'package:pcanvas/src/pcanvas_bitmap_extension.dart';
 
 /// A [PCanvas] Flutter [Widget].
 // ignore: must_be_immutable
@@ -196,7 +198,7 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
   }
 }
 
-typedef _PaintFunction = void Function(Canvas canvas, Size size);
+typedef _PaintOperation = void Function(Canvas canvas, Size size);
 
 class _PCanvasWidgetPainter extends CustomPainter {
   final ValueNotifier<int> _renderCount;
@@ -246,32 +248,93 @@ class _PCanvasWidgetPainter extends CustomPainter {
   Future<bool>? _requestedRepaint;
 
   Future<bool> requestRepaint() {
+    if (_operationsAsyncSz > 0) {
+      return Future.value(false);
+    }
+
     var requestedRepaint = _requestedRepaint;
     if (requestedRepaint != null) return requestedRepaint;
     return _requestedRepaint = Future.microtask(repaint);
   }
 
   bool repaint() {
+    if (_operationsAsyncSz > 0) {
+      return false;
+    }
+
     _renderCount.value++;
     return true;
   }
 
-  final List<_PaintFunction> _operations = <_PaintFunction>[];
+  final List<_PaintOperation> _operations = <_PaintOperation>[];
   int _operationsSz = 0;
 
-  void addOp(_PaintFunction pf) {
+  void addOp(_PaintOperation op) {
     if (_operationsSz == _operations.length) {
-      _operations.add(pf);
+      _operations.add(op);
       ++_operationsSz;
     } else {
-      _operations[_operationsSz++] = pf;
+      _operations[_operationsSz++] = op;
     }
 
     requestRepaint();
   }
 
+  final List<Future<_PaintOperation>> _operationsAsync =
+      <Future<_PaintOperation>>[];
+  int _operationsAsyncSz = 0;
+
+  Future<bool> addOpAsync(Future<_PaintOperation> opAsync,
+      {String? opType,
+      Duration timeout = const Duration(seconds: 30),
+      _PaintOperation? opTimeout}) {
+    if (_operationsSz == _operations.length) {
+      _operationsAsync.add(opAsync);
+      ++_operationsAsyncSz;
+    } else {
+      _operationsAsync[_operationsAsyncSz++] = opAsync;
+    }
+
+    _PaintOperation? resolvedF;
+
+    var resolveFuture = opAsync.then((f) {
+      resolvedF = f;
+      _removeOperationAsyncFuture(opAsync);
+      requestRepaint();
+      return true;
+    }).timeout(timeout, onTimeout: () {
+      resolvedF = opTimeout ?? (canvas, size) {};
+      _removeOperationAsyncFuture(opAsync);
+      requestRepaint();
+      return false;
+    });
+
+    addOp((canvas, size) {
+      var f = resolvedF;
+      if (f == null) {
+        throw StateError(
+            "Unresolved async operator function: ${opType ?? '?'}");
+      }
+      f(canvas, size);
+    });
+
+    return resolveFuture;
+  }
+
+  void _removeOperationAsyncFuture(Future<_PaintOperation> future) {
+    if (!_operationsAsync.remove(future)) {
+      throw StateError("Async operation future not found in stack!");
+    }
+    --_operationsAsyncSz;
+  }
+
   void clearOps() {
     _operationsSz = 0;
+
+    if (_operationsAsyncSz > 0) {
+      debugPrint(
+          '** Warning: cleaning operations with unresolved async operations in stack: $_operationsAsyncSz');
+    }
   }
 
   void _clearCanvas(Canvas canvas, Size size) {
@@ -283,6 +346,16 @@ class _PCanvasWidgetPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (_operationsAsyncSz > 0) {
+      debugPrint(
+          '** Warning: painting with unresolved async operations in stack: $_operationsAsyncSz');
+      return;
+    }
+
+    canvas.transform(Matrix4.identity().storage);
+
+    canvas.save();
+
     _clearCanvas(canvas, size);
 
     final sz = _operationsSz;
@@ -290,6 +363,8 @@ class _PCanvasWidgetPainter extends CustomPainter {
       var op = _operations[i];
       op(canvas, size);
     }
+
+    canvas.restore();
 
     _requestedRepaint = null;
   }
@@ -323,6 +398,21 @@ extension PStyleExtension on PStyle {
       p.strokeWidth = size / pixelRatio;
     }
   }
+}
+
+class PCanvasFactoryFlutter extends PCanvasFactory {
+  static final PCanvasFactoryFlutter instance = PCanvasFactoryFlutter._();
+
+  PCanvasFactoryFlutter._() : super.impl();
+
+  @override
+  PCanvas createPCanvas(int width, int height, PCanvasPainter painter,
+      {PCanvasPixels? initialPixels}) {
+    return PCanvasFlutter._(painter);
+  }
+
+  @override
+  Uint8List pixelsToPNG(PCanvasPixels pixels) => pixels.pixelsToImagePNG();
 }
 
 /// A [PCanvas] Flutter implementation.
@@ -391,6 +481,100 @@ class PCanvasFlutter extends PCanvas {
   }
 
   @override
+  void setPixels(PCanvasPixels pixels,
+      {int x = 0, int y = 0, int? width, int? height}) {
+    var w = width ?? this.width;
+    if (x + w > this.width) w = this.width - x;
+
+    var h = height ?? this.height;
+    if (y + h > this.height) h = this.height - y;
+
+    if (w <= 0 || h <= 0) return;
+
+    if (x > 0 || y > 0 || w != pixels.width || h != pixels.height) {
+      pixels = pixels.copyRect(x, y, w.toInt(), h.toInt())!;
+    }
+
+    ui.PixelFormat pixelFormat;
+
+    if (pixels is PCanvasPixelsRGBA) {
+      pixelFormat = ui.PixelFormat.rgba8888;
+    } else if (pixels is PCanvasPixelsARGB) {
+      pixelFormat = ui.PixelFormat.bgra8888;
+    } else {
+      pixels = pixels.toPCanvasPixelsARGB();
+      pixelFormat = ui.PixelFormat.bgra8888;
+    }
+
+    var pixelsData = pixels.pixels;
+    var pixelsDataBuffer = pixelsData.buffer;
+
+    var bytes = pixelsDataBuffer.asUint8List(
+        pixelsData.offsetInBytes, pixelsData.lengthInBytes);
+
+    Completer<ui.Image> imageCompelter = Completer<ui.Image>();
+
+    ui.decodeImageFromPixels(bytes, w.toInt(), h.toInt(), pixelFormat,
+        (image) => imageCompelter.complete(image));
+
+    var opAsync =
+        imageCompelter.future.then((image) => _opDrawImageAsync(image, x, y));
+
+    _widgetPainter.addOpAsync(opAsync);
+  }
+
+  _PaintOperation _opDrawImageAsync(ui.Image image, int x, int y) =>
+      (canvas, size) =>
+          canvas.drawImage(image, Offset(x.toDouble(), y.toDouble()), Paint());
+
+  @override
+  PCanvasStateExtra? get stateExtra => null;
+
+  PRectangle? _clip;
+
+  @override
+  PRectangle? get clip => _clip;
+
+  void _setClipGlobal(ui.Rect clipRect) {
+    _widgetPainter.addOp((canvas, size) {
+      canvas.restore();
+
+      canvas.transform(Matrix4.identity().storage);
+
+      canvas.save();
+      canvas.clipRect(clipRect);
+    });
+  }
+
+  @override
+  set clip(PRectangle? clip) {
+    if (clip == null) {
+      if (_clip != null) {
+        final widthD = canvasXD(width);
+        final heightD = canvasYD(height);
+
+        final rect = Rect.fromLTWH(0, 0, widthD, heightD);
+
+        _setClipGlobal(rect);
+        _clip = null;
+      }
+    } else {
+      if (_clip != clip) {
+        final xd = canvasXD(clip.x);
+        final yd = canvasYD(clip.y);
+
+        final widthD = canvasXD(clip.width);
+        final heightD = canvasYD(clip.height);
+
+        final rect = Rect.fromLTWH(xd, yd, widthD, heightD);
+
+        _setClipGlobal(rect);
+        _clip = clip;
+      }
+    }
+  }
+
+  @override
   get canvasNative => throw UnimplementedError();
 
   @override
@@ -413,8 +597,12 @@ class PCanvasFlutter extends PCanvas {
 
   @override
   void clearRect(num x, num y, num width, num height, {PStyle? style}) {
-    final xd = canvasXD(x);
-    final yd = canvasYD(y);
+    var xd = transform.xD(x);
+    var yd = transform.yD(y);
+
+    xd = canvasXD(xd);
+    yd = canvasYD(yd);
+
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
@@ -477,8 +665,12 @@ class PCanvasFlutter extends PCanvas {
           "Can't handle image type `${image.runtimeType}`: $image");
     }
 
-    final xd = canvasXD(x);
-    final yd = canvasYD(y);
+    var xd = transform.xD(x);
+    var yd = transform.yD(y);
+
+    xd = canvasXD(xd);
+    yd = canvasYD(yd);
+
     final offset = Offset(xd, yd);
 
     _widgetPainter.addOp((canvas, size) {
@@ -497,8 +689,12 @@ class PCanvasFlutter extends PCanvas {
           "Can't handle image type `${image.runtimeType}`: $image");
     }
 
-    final xd = canvasXD(x);
-    final yd = canvasYD(y);
+    var xd = transform.xD(x);
+    var yd = transform.yD(y);
+
+    xd = canvasXD(xd);
+    yd = canvasYD(yd);
+
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
@@ -522,8 +718,12 @@ class PCanvasFlutter extends PCanvas {
           "Can't handle image type `${image.runtimeType}`: $image");
     }
 
-    final dstXD = canvasXD(dstX);
-    final dstYD = canvasYD(dstY);
+    var dstXD = transform.xD(dstX);
+    var dstYD = transform.yD(dstY);
+
+    dstXD = canvasXD(dstXD);
+    dstYD = canvasYD(dstYD);
+
     final dstWidthD = canvasXD(dstWidth);
     final dstHeightD = canvasYD(dstHeight);
 
@@ -539,8 +739,12 @@ class PCanvasFlutter extends PCanvas {
 
   @override
   void fillRect(num x, num y, num width, num height, PStyle style) {
-    final xd = canvasXD(x);
-    final yd = canvasYD(y);
+    var xd = transform.xD(x);
+    var yd = transform.yD(y);
+
+    xd = canvasXD(xd);
+    yd = canvasYD(yd);
+
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
@@ -555,8 +759,12 @@ class PCanvasFlutter extends PCanvas {
   @override
   void strokeCircle(num x, num y, num radius, PStyle style,
       {num startAngle = 0, num endAngle = 360}) {
-    var xd = canvasXD(x);
-    var yd = canvasYD(y);
+    var xd = transform.xD(x);
+    var yd = transform.yD(y);
+
+    xd = canvasXD(xd);
+    yd = canvasYD(yd);
+
     var radiusD2 = canvasXD(radius) * 2;
 
     final rect = Rect.fromLTWH(xd, yd, radiusD2, radiusD2);
@@ -571,8 +779,12 @@ class PCanvasFlutter extends PCanvas {
   @override
   void fillCircle(num x, num y, num radius, PStyle style,
       {num startAngle = 0, num endAngle = 360}) {
-    var xd = canvasXD(x);
-    var yd = canvasYD(y);
+    var xd = transform.xD(x);
+    var yd = transform.yD(y);
+
+    xd = canvasXD(xd);
+    yd = canvasYD(yd);
+
     var radiusD2 = canvasXD(radius) * 2;
 
     final rect = Rect.fromLTWH(xd, yd, radiusD2, radiusD2);
@@ -587,8 +799,12 @@ class PCanvasFlutter extends PCanvas {
   @override
   void fillTopDownGradient(
       num x, num y, num width, num height, PColor colorFrom, PColor colorTo) {
-    final xd = canvasXD(x);
-    final yd = canvasYD(y);
+    var xd = transform.xD(x);
+    var yd = transform.yD(y);
+
+    xd = canvasXD(xd);
+    yd = canvasYD(yd);
+
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
@@ -609,8 +825,12 @@ class PCanvasFlutter extends PCanvas {
   @override
   void fillLeftRightGradient(
       num x, num y, num width, num height, PColor colorFrom, PColor colorTo) {
-    final xd = canvasXD(x);
-    final yd = canvasYD(y);
+    var xd = transform.xD(x);
+    var yd = transform.yD(y);
+
+    xd = canvasXD(xd);
+    yd = canvasYD(yd);
+
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
@@ -630,8 +850,12 @@ class PCanvasFlutter extends PCanvas {
 
   @override
   void strokeRect(num x, num y, num width, num height, PStyle style) {
-    final xd = canvasXD(x);
-    final yd = canvasYD(y);
+    var xd = transform.xD(x);
+    var yd = transform.yD(y);
+
+    xd = canvasXD(xd);
+    yd = canvasYD(yd);
+
     final widthD = canvasXD(width);
     final heightD = canvasYD(height);
 
@@ -673,8 +897,11 @@ class PCanvasFlutter extends PCanvas {
         var x = path[i];
         var y = path[i + 1];
 
-        final xd = canvasXD(x);
-        final yd = canvasYD(y);
+        var xd = transform.xD(x);
+        var yd = transform.yD(y);
+
+        xd = canvasXD(xd);
+        yd = canvasYD(yd);
 
         if (i == 0) {
           fullPath.moveTo(xd, yd);
@@ -686,6 +913,7 @@ class PCanvasFlutter extends PCanvas {
     } else if (path is List<Point>) {
       var i = 0;
       for (var p in path) {
+        p = transform.point(p);
         p = canvasPoint(p);
 
         if (i == 0) {
@@ -703,8 +931,11 @@ class PCanvasFlutter extends PCanvas {
           var x = e;
           var y = path[++i];
 
-          final xd = canvasXD(x);
-          final yd = canvasYD(y);
+          var xd = transform.xD(x);
+          var yd = transform.yD(y);
+
+          xd = canvasXD(xd);
+          yd = canvasYD(yd);
 
           if (i == 1) {
             fullPath.moveTo(xd, yd);
@@ -713,6 +944,7 @@ class PCanvasFlutter extends PCanvas {
             fullPath.lineTo(xd, yd);
           }
         } else if (e is Point) {
+          e = transform.point(e);
           e = canvasPoint(e);
 
           if (i == 0) {
@@ -752,8 +984,11 @@ class PCanvasFlutter extends PCanvas {
 
   @override
   void drawText(String text, num x, num y, PFont font, PStyle style) {
-    final xd = canvasXD(x);
-    final yd = canvasYD(y);
+    var xd = transform.xD(x);
+    var yd = transform.yD(y);
+
+    xd = canvasXD(xd);
+    yd = canvasYD(yd);
 
     final textStyle =
         font.toTextStyle(color: style.color, pixelRatio: pixelRatio);
@@ -797,7 +1032,7 @@ class PCanvasFlutter extends PCanvas {
     var data = byteData!.buffer
         .asUint32List(byteData.offsetInBytes, byteData.lengthInBytes ~/ 4);
 
-    return PCanvasPixelsABGR(image.width, image.height, data);
+    return PCanvasPixelsABGR.fromPixels(image.width, image.height, data);
   }
 
   @override
@@ -935,5 +1170,13 @@ extension PColorExtension on PColor {
     } else {
       throw StateError("Can't convert Color type `${c.runtimeType}`: $c");
     }
+  }
+}
+
+extension PRectangleFlutterExtension on PRectangle {
+  ui.Rect get asUIRect {
+    var r = ui.Rect.fromLTWH(
+        x.toDouble(), y.toDouble(), width.toDouble(), height.toDouble());
+    return r;
   }
 }
