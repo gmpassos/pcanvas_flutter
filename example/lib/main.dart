@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pcanvas_flutter/pcanvas_flutter.dart';
+import 'package:collection/collection.dart';
 
 void main() {
   runApp(const MyApp());
@@ -45,6 +46,37 @@ class MyCanvasPainter extends PCanvasPainter {
     }
 
     pCanvas.log('** Loaded images!');
+
+    {
+      var panel = PCanvasPanel2D(
+          height: 100,
+          width: 200,
+          pos: const Point(100, 100),
+          zIndex: 999999,
+          style: PStyle(color: PColor.colorWhite.copyWith(alpha: 0.50)));
+
+      panel.addElement(PRectangleElement(
+          style: PColor.colorRed.toStyle(),
+          pos: const Point(10, 20),
+          width: 20,
+          height: 10));
+
+      var panel2 = PCanvasPanel2D(
+          height: 50,
+          width: 100,
+          pos: const Point(20, 10),
+          style: PStyle(color: PColor.colorGrey.copyWith(alpha: 0.50)));
+
+      panel2.addElement(PRectangleElement(
+          style: PColor.colorBlue.toStyle(),
+          pos: const Point(5, 10),
+          width: 10,
+          height: 5));
+
+      panel.addElement(panel2);
+
+      pCanvas.addElement(panel);
+    }
 
     return true;
   }
@@ -143,14 +175,62 @@ class MyCanvasPainter extends PCanvasPainter {
     pCanvas?.log(event);
   }
 
+  int _stepCount = 0;
+
   @override
   void onKeyDown(PCanvasKeyEvent event) {
+    var pCanvas = this.pCanvas!;
+
     var s = event.code?.toLowerCase() == 'enter' ? '\n' : (event.key ?? '');
 
     textExtra += s;
 
+    var keyCode = event.code?.toLowerCase() ?? '';
+    var key = event.key?.toLowerCase() ?? '';
+
+    var step = 0;
+
+    if (keyCode.contains('right') || key == 'd') {
+      if (_stepCount <= 0) {
+        _stepCount = 1;
+      } else {
+        _stepCount++;
+      }
+
+      step = _stepCount.clamp(1, 30);
+    } else if (keyCode.contains('left') || key == 'a') {
+      if (_stepCount >= 0) {
+        _stepCount = -1;
+      } else {
+        _stepCount--;
+      }
+
+      step = _stepCount.clamp(-30, -1);
+    }
+
+    {
+      var rectElem1 = pCanvas
+          .selectElementByType<PCanvasPanel2D>()
+          .firstOrNull
+          ?.selectElementByType<PRectangleElement>()
+          .firstOrNull;
+
+      var rectElem2 = pCanvas
+          .selectElementByType<PCanvasPanel2D>()
+          .firstOrNull
+          ?.selectElementByType<PCanvasPanel2D>()
+          .firstOrNull
+          ?.selectElementByType<PRectangleElement>()
+          .firstOrNull;
+
+      rectElem1?.position = rectElem1.position.incrementX(step);
+      rectElem2?.position = rectElem2.position.incrementX(step ~/ 2);
+
+      refresh();
+    }
+
     refresh();
 
-    pCanvas?.log(event);
+    pCanvas.log(event);
   }
 }
