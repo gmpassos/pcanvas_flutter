@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,9 +6,9 @@ import 'package:pcanvas_flutter/pcanvas_flutter.dart';
 
 void main() {
   testWidgets('PCanvasWidget test', (WidgetTester tester) async {
-    tester.binding.window.physicalSizeTestValue = const Size(10, 10);
-    tester.binding.window.devicePixelRatioTestValue = 3;
-    tester.binding.window.paddingTestValue = WindowPadding.zero;
+    tester.view.physicalSize = const Size(10, 10);
+    tester.view.devicePixelRatio = 3;
+    tester.view.padding = FakeViewPadding.zero;
 
     await tester.pumpWidget(const MyApp());
 

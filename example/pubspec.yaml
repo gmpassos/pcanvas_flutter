@@ -22,8 +22,8 @@ dev_dependencies:
 dependency_overrides:
   pcanvas_flutter:
     path: ../
-#  pcanvas:
-#    path: ../../pcanvas
+  pcanvas:
+    path: ../../pcanvas
 
 flutter:
   uses-material-design: true

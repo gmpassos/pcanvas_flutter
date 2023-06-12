@@ -49,29 +49,25 @@ class MyCanvasPainter extends PCanvasPainter {
 
     {
       var panel = PCanvasPanel2D(
-          height: 100,
-          width: 200,
           pos: const Point(100, 100),
+          dimension: const PDimension(200, 100),
           zIndex: 999999,
           style: PStyle(color: PColor.colorWhite.copyWith(alpha: 0.50)));
 
       panel.addElement(PRectangleElement(
           style: PColor.colorRed.toStyle(),
           pos: const Point(10, 20),
-          width: 20,
-          height: 10));
+          dimension: const PDimension(20, 10)));
 
       var panel2 = PCanvasPanel2D(
-          height: 50,
-          width: 100,
           pos: const Point(20, 10),
+          dimension: const PDimension(100, 50),
           style: PStyle(color: PColor.colorGrey.copyWith(alpha: 0.50)));
 
       panel2.addElement(PRectangleElement(
           style: PColor.colorBlue.toStyle(),
           pos: const Point(5, 10),
-          width: 10,
-          height: 5));
+          dimension: const PDimension(10, 5)));
 
       panel.addElement(panel2);
 
@@ -168,6 +164,8 @@ class MyCanvasPainter extends PCanvasPainter {
 
     rectX += 10;
     rectY += 10;
+
+    pCanvas!.cursor = PCanvasCursor.grab;
 
     // Force a refresh of the canvas:
     refresh();

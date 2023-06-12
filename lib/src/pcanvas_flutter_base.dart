@@ -29,7 +29,7 @@ class PCanvasWidget extends StatefulWidget {
   });
 
   /// The [PCanvas] of this widget.
-  late final PCanvasFlutter pCanvas = PCanvasFlutter._(_painter);
+  late final PCanvasFlutter pCanvas = PCanvasFlutter._(this, _painter);
 
   _PCanvasWidgetState? _state;
 
@@ -46,6 +46,9 @@ class PCanvasWidget extends StatefulWidget {
 
   /// Refreshes the [PCanvas] of this widget.
   void refresh() => _state?.refresh();
+
+  /// Forces rebuild of this [Widget].
+  void rebuild() => _state?.rebuild();
 }
 
 class _PCanvasWidgetState extends State<PCanvasWidget> {
@@ -84,8 +87,14 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
     }
   }
 
+  ui.FlutterView? _view;
+
+  ui.FlutterView? get view => _view;
+
   @override
   Widget build(BuildContext context) {
+    _pCanvasFlutter._widgetPainter.setView(View.of(context));
+
     return LayoutBuilder(
       builder: (_, constraints) {
         var width = constraints.widthConstraints().maxWidth;
@@ -102,20 +111,25 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
           child: RawKeyboardListener(
               focusNode: _focusNode,
               onKey: _onKey,
-              child: GestureDetector(
-                onTapDown: _onTapDown,
-                onTapUp: _onTapUp,
-                onTap: _onTap,
-                onTapCancel: _onTapCancel,
-                child: CustomPaint(
-                    painter: _pCanvasFlutter._widgetPainter, willChange: true),
-              )),
+              child: MouseRegion(
+                  cursor: _pCanvasFlutter._mouseCursor ?? MouseCursor.defer,
+                  child: GestureDetector(
+                    onTapDown: _onTapDown,
+                    onTapUp: _onTapUp,
+                    onTap: _onTap,
+                    onTapCancel: _onTapCancel,
+                    child: CustomPaint(
+                        painter: _pCanvasFlutter._widgetPainter,
+                        willChange: true),
+                  ))),
         );
       },
     );
   }
 
   void refresh() => _pCanvasFlutter.refresh();
+
+  void rebuild() => setState(() {});
 
   void _onKey(RawKeyEvent keyEvent) {
     String type;
@@ -138,12 +152,14 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
         keyEvent.isShiftPressed,
         keyEvent.isMetaPressed);
 
+    final painter = _widget._painter;
+
     if (type == 'onKeyDown') {
-      _widget._painter.onKeyDown(event);
+      painter.dispatchOnKeyDown(event);
     } else if (type == 'onKeyUp') {
-      _widget._painter.onKeyUp(event);
+      painter.dispatchOnKeyUp(event);
     } else {
-      _widget._painter.onKey(event);
+      painter.dispatchOnKey(event);
     }
 
     var f = _widget.onKey;
@@ -152,12 +168,26 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
     }
   }
 
+  Point _toCanvasPoint(Offset localPosition) {
+    var x = localPosition.dx;
+    var y = localPosition.dy;
+
+    var pixelRatio = _pCanvasFlutter.pixelRatio;
+    if (pixelRatio != 1) {
+      x = x * pixelRatio;
+      y = y * pixelRatio;
+    }
+
+    return Point(x, y);
+  }
+
   void _onTapDown(TapDownDetails details) {
     _focusNode.requestFocus();
 
-    var event = PCanvasClickEvent(
-        'onTapDown', details.localPosition.dx, details.localPosition.dy);
-    _widget._painter.onClickDown(event);
+    var p = _toCanvasPoint(details.localPosition);
+    var event = PCanvasClickEvent('onTapDown', p.x, p.y);
+
+    _widget._painter.dispatchOnClickDown(event);
 
     var f = _widget.onTapDown;
     if (f != null) {
@@ -168,9 +198,10 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
   PCanvasClickEvent? _lastOnTapUpEvent;
 
   void _onTapUp(TapUpDetails details) {
-    var event = _lastOnTapUpEvent = PCanvasClickEvent(
-        'onTapUp', details.localPosition.dx, details.localPosition.dy);
-    _widget._painter.onClickUp(event);
+    var p = _toCanvasPoint(details.localPosition);
+    var event = _lastOnTapUpEvent = PCanvasClickEvent('onTapUp', p.x, p.y);
+
+    _widget._painter.dispatchOnClickUp(event);
 
     var f = _widget.onTapUp;
     if (f != null) {
@@ -181,7 +212,7 @@ class _PCanvasWidgetState extends State<PCanvasWidget> {
   void _onTap() {
     var event = _lastOnTapUpEvent;
     if (event != null) {
-      _widget._painter.onClick(event);
+      _widget._painter.dispatchOnClick(event.copyWith(type: 'onTap'));
     }
 
     var f = _widget.onTap;
@@ -244,6 +275,12 @@ class _PCanvasWidgetPainter extends CustomPainter {
 
     return false;
   }
+
+  ui.FlutterView? _view;
+
+  void setView(ui.FlutterView view) => _view = view;
+
+  ui.FlutterView? get view => _view;
 
   Future<bool>? _requestedRepaint;
 
@@ -408,7 +445,8 @@ class PCanvasFactoryFlutter extends PCanvasFactory {
   @override
   PCanvas createPCanvas(int width, int height, PCanvasPainter painter,
       {PCanvasPixels? initialPixels}) {
-    return PCanvasFlutter._(painter);
+    var pCanvasWidget = PCanvasWidget(painter);
+    return pCanvasWidget.pCanvas;
   }
 
   @override
@@ -417,10 +455,26 @@ class PCanvasFactoryFlutter extends PCanvasFactory {
 
 /// A [PCanvas] Flutter implementation.
 class PCanvasFlutter extends PCanvas {
+  final PCanvasWidget _pCanvasWidget;
+
+  PCanvasWidget get pCanvasWidget => _pCanvasWidget;
+
   @override
   final PCanvasPainter painter;
 
   final _PCanvasWidgetPainter _widgetPainter = _PCanvasWidgetPainter();
+
+  @override
+  PCanvas get asPCanvas => this;
+
+  @override
+  PCanvas get pCanvas => this;
+
+  @override
+  PCanvasElement? get asPCanvasElement => null;
+
+  @override
+  PRectangle get boundingBox => PRectangle(0, 0, width, height);
 
   @override
   num get width => _widgetPainter.width;
@@ -428,7 +482,7 @@ class PCanvasFlutter extends PCanvas {
   @override
   num get height => _widgetPainter.height;
 
-  PCanvasFlutter._(this.painter) : super.impl();
+  PCanvasFlutter._(this._pCanvasWidget, this.painter) : super.impl();
 
   @override
   num get elementWidth => _widgetPainter.elementWidth;
@@ -437,7 +491,7 @@ class PCanvasFlutter extends PCanvas {
   num get elementHeight => _widgetPainter.elementHeight;
 
   @override
-  num get devicePixelRatio => ui.window.devicePixelRatio;
+  num get devicePixelRatio => _widgetPainter.view?.devicePixelRatio ?? 1.0;
 
   @override
   num get pixelRatio => _widgetPainter.pixelRatio;
@@ -451,6 +505,11 @@ class PCanvasFlutter extends PCanvas {
 
   @override
   void checkDimension() {}
+
+  @override
+  PCanvasClickEvent toInnerClickEvent(PCanvasClickEvent event,
+          {PCanvasElement? targetElement, PCanvas? pCanvas}) =>
+      event.copyWith(targetElement: targetElement, pCanvas: pCanvas);
 
   @override
   void log(Object? o) {
@@ -467,8 +526,30 @@ class PCanvasFlutter extends PCanvas {
   @override
   FutureOr<bool> waitLoading() => painter.waitLoading();
 
+  Future<bool>? _requestedPaint;
+
   @override
-  Future<bool> requestRepaint() => _widgetPainter.requestRepaint();
+  bool get isPaintRequested => _requestedPaint != null;
+
+  @override
+  Future<bool> requestRepaint() {
+    var requestedPaint = _requestedPaint;
+    if (requestedPaint != null) return requestedPaint;
+
+    return _requestedPaint = _widgetPainter.requestRepaint();
+  }
+
+  @override
+  Future<bool> requestRepaintDelayed(Duration delay) {
+    var requestedPaint = _requestedPaint;
+    if (requestedPaint != null) return requestedPaint;
+
+    if (delay.inMilliseconds == 0) {
+      return _requestedPaint = refresh();
+    } else {
+      return _requestedPaint = Future.delayed(delay, refresh);
+    }
+  }
 
   @override
   void onPrePaint() {
@@ -574,8 +655,26 @@ class PCanvasFlutter extends PCanvas {
     }
   }
 
+  MouseCursor? _mouseCursor;
+
   @override
-  get canvasNative => throw UnimplementedError();
+  void setCursor(PCanvasCursor cursor) {
+    var prevCursor = getCursor();
+
+    if (cursor != prevCursor) {
+      var mouseCursor = cursor.mouseCursor;
+      _mouseCursor = mouseCursor;
+      _pCanvasWidget.rebuild();
+    }
+  }
+
+  @override
+  PCanvasCursor getCursor() {
+    return _mouseCursor?.pCanvasCursor ?? PCanvasCursor.cursor;
+  }
+
+  @override
+  get canvasNative => _widgetPainter;
 
   @override
   num canvasX(num x) => x / pixelRatio;
@@ -1050,6 +1149,62 @@ class PCanvasFlutter extends PCanvas {
   @override
   String toString() {
     return 'PCanvasFlutter[${width}x$height]$info';
+  }
+}
+
+extension PCanvasCursorToMouseCursorExtension on PCanvasCursor {
+  MouseCursor get mouseCursor {
+    switch (this) {
+      case PCanvasCursor.cursor:
+        return SystemMouseCursors.basic;
+      case PCanvasCursor.pointer:
+        return SystemMouseCursors.click;
+      case PCanvasCursor.grab:
+        return SystemMouseCursors.grab;
+      case PCanvasCursor.crosshair:
+        return SystemMouseCursors.precise;
+      case PCanvasCursor.text:
+        return SystemMouseCursors.text;
+      case PCanvasCursor.wait:
+        return SystemMouseCursors.wait;
+      case PCanvasCursor.zoomIn:
+        return SystemMouseCursors.zoomIn;
+      case PCanvasCursor.zoomOut:
+        return SystemMouseCursors.zoomOut;
+    }
+  }
+}
+
+extension MouseCursorToPCanvasCursorExtension on MouseCursor {
+  PCanvasCursor get pCanvasCursor {
+    final self = this;
+
+    if (self is! SystemMouseCursor) {
+      return PCanvasCursor.cursor;
+    }
+
+    var kind = self.kind;
+
+    switch (kind) {
+      case 'basic':
+        return PCanvasCursor.cursor;
+      case 'click':
+        return PCanvasCursor.pointer;
+      case 'grab':
+        return PCanvasCursor.grab;
+      case 'precise':
+        return PCanvasCursor.crosshair;
+      case 'text':
+        return PCanvasCursor.text;
+      case 'wait':
+        return PCanvasCursor.wait;
+      case 'zoomIn':
+        return PCanvasCursor.zoomIn;
+      case 'zoomOut':
+        return PCanvasCursor.zoomOut;
+      default:
+        return PCanvasCursor.cursor;
+    }
   }
 }
 

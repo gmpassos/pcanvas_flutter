@@ -1,3 +1,13 @@
+## 1.1.0
+
+- `PCanvasWidget`:
+  - Added `rebuild`.
+
+- sdk: '>=3.0.0 <4.0.0'
+- flutter: ">=3.10.0"
+- pcanvas: ^1.1.0
+- flutter_lints: ^2.0.1
+
 ## 1.0.7
 
 - `PCanvasFlutter`:
