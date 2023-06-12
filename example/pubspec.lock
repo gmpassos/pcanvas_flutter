@@ -182,9 +182,10 @@ packages:
   pcanvas:
     dependency: "direct main"
     description:
-      path: "../../pcanvas"
-      relative: true
-    source: path
+      name: pcanvas
+      sha256: "2c4f1c947e2ce361df93ca2333a02ec63eb49d5ff469dbaa7cd38caa99ea4128"
+      url: "https://pub.dev"
+    source: hosted
     version: "1.1.0"
   pcanvas_flutter:
     dependency: "direct main"
