@@ -21,8 +21,8 @@ jobs:
           uname -a
       - name: Install dependencies
         run: flutter pub get
-      - name: flutter format
-        run: flutter format -o none --set-exit-if-changed .
+      - name: dart format
+        run: dart format -o none --set-exit-if-changed .
       - name: flutter analyze
         run: flutter analyze --fatal-infos --fatal-warnings .
       - name: Run tests
